@@ -1,4 +1,4 @@
-use std::{process::Command, error::Error, collections::HashMap};
+use std::{process::Command, error::Error, collections::HashMap, fs};
 
 #[derive(Debug)]
 pub struct PhonemeCharacter<'a> {
@@ -64,11 +64,39 @@ pub const SHAVIAN_ALPHABET: [ShavianCharacter; 48] = [
     ShavianCharacter { name: "YEW", character: '\u{1047F}', phoneme: PhonemeCharacter { ipa: "\u{006A}\u{0075}\u{02D0}", examples: ["yew","",""] }}
 ];
 
-pub fn ipa_cleanup(ipa: String) -> String {
+pub fn text_stats(contents: &String) -> String {
+    let num_char = contents
+        .clone()
+        .replace("\n", "")
+        .chars()
+        .count();
+
+    let contents = contents
+        .replace("\n", " \n ")
+        .replace("  ", " ");
+
+    let contents: Vec<&str> = contents
+        .split(" ")
+        .collect();
+
+    let mut num_words = 0;
+
+    for word in contents.iter() {
+        if word != &"\n" && word != &"" { num_words += 1};
+    }
+
+    format!(
+        "Contents: {}...\nCharacters: {}\nWords: {}",
+        contents[0..4].join(" "),
+        num_char,
+        num_words
+    )
+}
+pub fn ipa_cleanup(ipa: &String) -> String {
     let mut ipa = ipa
         .replace("\u{02CC}", "")
         .replace("\u{02C8}", "")
-        .replace("\n", "");
+        .replace("\n", " ");
 
     ipa.push(' ');
 
@@ -86,7 +114,7 @@ pub fn predictive_fix(ipa: char) -> char {
     
     match case.get(&ipa) {
         Some(c) => c.character,
-        None => ' '
+        None => ipa
     }
 }
 
@@ -105,10 +133,12 @@ pub fn roman_to_ipa(file: &str) -> Result<String, Box<dyn Error>> {
         .arg("-q");
 
 
+
     Ok(String::from_utf8(speak.output()?.stdout)?)
 }
 
 pub fn ipa_to_shavian(ipa: String) -> String {
+    let mut shavian = String::new();
     let mut buffer: [u16; 3] = [0; 3];
     let mut skip2 = false;
     let mut skip1 = false;
@@ -123,59 +153,80 @@ pub fn ipa_to_shavian(ipa: String) -> String {
         if skip2 { skip2 = false; skip1 = true; continue; };
         if skip1 { skip1 = false; continue; };
 
-        println!("#############");
         if let Ok(join) = String::from_utf16(&buffer) {
-            for shavian in SHAVIAN_ALPHABET {
-                if join == shavian.phoneme.ipa {
+            for shavian_obj in SHAVIAN_ALPHABET {
+                if join == shavian_obj.phoneme.ipa {
                     flag = true;
                     skip2 = true;
-                    println!("MATCH({i}): {:?}", join);
-                    println!("{:?}", shavian);
+                    shavian.push(shavian_obj.character);
                     break;
                 }
-            }
-            if !flag {
-                println!("NOMATCH({i}): {:?}", join);
             }
         }
         if !flag {
             if let Ok(join) = String::from_utf16(&buffer[..2]) {
-                for shavian in SHAVIAN_ALPHABET {
-                    if join == shavian.phoneme.ipa {
+                for shavian_obj in SHAVIAN_ALPHABET {
+                    if join == shavian_obj.phoneme.ipa {
                         flag = true;
                         skip1 = true;
-                        println!("MATCH({i}): {:?}", join);
-                        println!("{:?}", shavian);
+                        shavian.push(shavian_obj.character);
                         break;
                     }
-                }
-                if !flag {
-                    println!("NOMATCH({i}): {:?}", join);
                 }
             }
         }
         if !flag {
             if let Ok(join) = String::from_utf16(&buffer[..1]) {
-                for shavian in SHAVIAN_ALPHABET {
-                    if join == " ".to_string() { println!("{i}: SPACE"); break; }; 
-                    if join == shavian.phoneme.ipa {
+                for shavian_obj in SHAVIAN_ALPHABET {
+                    if join == " ".to_string() { shavian.push(' '); break; }; 
+                    if join == shavian_obj.phoneme.ipa {
                         flag = true;
-                        println!("MATCH({i}): {:?}", join);
-                        println!("{:?}", shavian);
+                        shavian.push(shavian_obj.character);
                         break;
                     }
                 }
                 if !flag {
-                    println!("NOMATCH({i}): {:?} REPLACE({})", join, predictive_fix(join.chars().next().unwrap_or_else(|| '0')));
+                    shavian.push(predictive_fix(join.chars().next().unwrap_or_else(|| '0')));
                 }
             }
         }
-        println!("#############\n");
     }
 
-    ipa
+    shavian
 }
 
-pub fn roman_to_shavian(file: &str) -> Result<String, Box<dyn Error>> {
-    Ok(ipa_to_shavian(ipa_cleanup(roman_to_ipa(file)?)))
+pub fn roman_to_shavian(file: &str, flag: bool) -> Result<(), Box<dyn Error>> {
+    let roman = fs::read_to_string(file)?;
+    let ipa = roman_to_ipa(file)?;
+    let shavian = ipa_to_shavian(ipa_cleanup(&ipa)); 
+
+    if flag {
+        let mut header = format!("###{}", file);
+        let mut footer = String::new();
+
+        loop {
+            header += "#";
+            if header.len() == 42 { break; }
+        }
+
+        for _ in 0..header.len() {
+           footer += "#"; 
+        }
+
+        println!("{}", header);
+        println!("===[ roman ]==============================");
+        println!("{}", text_stats(&roman));
+        println!("[-]=======================================\n");
+        println!("===[ ipa ]================================");
+        println!("{}", text_stats(&ipa));
+        println!("[-]=======================================\n");
+        println!("===[ shavian ]============================");
+        println!("{}", text_stats(&shavian));
+        println!("[-]=======================================");
+        println!("{}", footer);
+    } else {
+        println!("{shavian}");
+    }
+
+    Ok(())
 }
