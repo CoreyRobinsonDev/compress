@@ -1,10 +1,12 @@
-use std::{process::Command, error::Error};
+use std::{process::Command, error::Error, collections::HashMap};
 
 #[derive(Debug)]
 pub struct PhonemeCharacter<'a> {
     ipa: &'a str,
     examples: [&'a str; 3]
 }
+
+#[derive(Debug)]
 pub struct ShavianCharacter<'a> {
     name: &'a str,
     character: char,
@@ -55,12 +57,38 @@ pub const SHAVIAN_ALPHABET: [ShavianCharacter; 48] = [
     ShavianCharacter { name: "ARE", character: '\u{10478}', phoneme: PhonemeCharacter { ipa: "\u{0251}\u{02D0}\u{0072}", examples: ["ar","",""] }},
     ShavianCharacter { name: "OR", character: '\u{10479}', phoneme: PhonemeCharacter { ipa: "\u{0254}\u{02D0}\u{0072}", examples: ["or","oar",""] }},
     ShavianCharacter { name: "AIR", character: '\u{1047A}', phoneme: PhonemeCharacter { ipa: "\u{025B}\u{0259}\u{0072}", examples: ["are","ar",""] }},
-    ShavianCharacter { name: "ERR", character: '\u{1047B}', phoneme: PhonemeCharacter { ipa: "\u{025C}\u{02D0}\u{0072}", examples: ["ur","urr","or"] }},
+    ShavianCharacter { name: "ERR", character: '\u{1047B}', phoneme: PhonemeCharacter { ipa: "\u{025C}\u{02D0}", examples: ["ur","urr","or"] }},
     ShavianCharacter { name: "ARRAY", character: '\u{1047C}', phoneme: PhonemeCharacter { ipa: "\u{0259}\u{0072}", examples: ["er","ar","or"] }},
     ShavianCharacter { name: "EAR", character: '\u{1047D}', phoneme: PhonemeCharacter { ipa: "\u{026A}\u{0259}\u{0072}", examples: ["ear","er",""] }},
     ShavianCharacter { name: "IAN", character: '\u{1047E}', phoneme: PhonemeCharacter { ipa: "\u{0069}\u{0259}", examples: ["ia","",""] }},
     ShavianCharacter { name: "YEW", character: '\u{1047F}', phoneme: PhonemeCharacter { ipa: "\u{006A}\u{0075}\u{02D0}", examples: ["yew","",""] }}
 ];
+
+pub fn ipa_cleanup(ipa: String) -> String {
+    let mut ipa = ipa
+        .replace("\u{02CC}", "")
+        .replace("\u{02C8}", "")
+        .replace("\n", "");
+
+    ipa.push(' ');
+
+    ipa
+}
+
+pub fn predictive_fix(ipa: char) -> char {
+    let mut case: HashMap<char, ShavianCharacter> = HashMap::new();
+
+    case.insert('\u{0279}', ShavianCharacter { name: "ROAR", character: '\u{1046E}', phoneme: PhonemeCharacter { ipa: "\u{0072}", examples: ["r","",""] }});
+    case.insert('\u{0250}', ShavianCharacter { name: "ADO", character: '\u{10469}', phoneme: PhonemeCharacter { ipa: "\u{0259}", examples: ["a","o",""] }});
+    case.insert('\u{0069}', ShavianCharacter { name: "EAT", character: '\u{10470}', phoneme: PhonemeCharacter { ipa: "\u{0069}\u{02D0}", examples: ["ee","e",""] }});
+    case.insert('\u{0061}', ShavianCharacter { name: "AH", character: '\u{1046D}', phoneme: PhonemeCharacter { ipa: "\u{0251}\u{02D0}", examples: ["a","",""] }});
+    case.insert('\u{025C}', ShavianCharacter { name: "UP", character: '\u{10473}', phoneme: PhonemeCharacter { ipa: "\u{028C}", examples: ["u","",""] }});
+    
+    match case.get(&ipa) {
+        Some(c) => c.character,
+        None => ' '
+    }
+}
 
 // https://github.com/espeak-ng/espeak-ng/tree/master
 pub fn roman_to_ipa(file: &str) -> Result<String, Box<dyn Error>> {
@@ -80,8 +108,74 @@ pub fn roman_to_ipa(file: &str) -> Result<String, Box<dyn Error>> {
     Ok(String::from_utf8(speak.output()?.stdout)?)
 }
 
-pub fn ipa_to_shavian(ipa: &str) -> String {
+pub fn ipa_to_shavian(ipa: String) -> String {
+    let mut buffer: [u16; 3] = [0; 3];
+    let mut skip2 = false;
+    let mut skip1 = false;
 
+    for (i, b) in ipa.encode_utf16().enumerate() {
+        let mut flag = false;
+        buffer[0] = buffer[1];
+        buffer[1] = buffer[2];
+        buffer[2] = b;
 
-    "".to_string()
+        if i == 0 || i == 1 { continue; };
+        if skip2 { skip2 = false; skip1 = true; continue; };
+        if skip1 { skip1 = false; continue; };
+
+        println!("#############");
+        if let Ok(join) = String::from_utf16(&buffer) {
+            for shavian in SHAVIAN_ALPHABET {
+                if join == shavian.phoneme.ipa {
+                    flag = true;
+                    skip2 = true;
+                    println!("MATCH({i}): {:?}", join);
+                    println!("{:?}", shavian);
+                    break;
+                }
+            }
+            if !flag {
+                println!("NOMATCH({i}): {:?}", join);
+            }
+        }
+        if !flag {
+            if let Ok(join) = String::from_utf16(&buffer[..2]) {
+                for shavian in SHAVIAN_ALPHABET {
+                    if join == shavian.phoneme.ipa {
+                        flag = true;
+                        skip1 = true;
+                        println!("MATCH({i}): {:?}", join);
+                        println!("{:?}", shavian);
+                        break;
+                    }
+                }
+                if !flag {
+                    println!("NOMATCH({i}): {:?}", join);
+                }
+            }
+        }
+        if !flag {
+            if let Ok(join) = String::from_utf16(&buffer[..1]) {
+                for shavian in SHAVIAN_ALPHABET {
+                    if join == " ".to_string() { println!("{i}: SPACE"); break; }; 
+                    if join == shavian.phoneme.ipa {
+                        flag = true;
+                        println!("MATCH({i}): {:?}", join);
+                        println!("{:?}", shavian);
+                        break;
+                    }
+                }
+                if !flag {
+                    println!("NOMATCH({i}): {:?} REPLACE({})", join, predictive_fix(join.chars().next().unwrap_or_else(|| '0')));
+                }
+            }
+        }
+        println!("#############\n");
+    }
+
+    ipa
+}
+
+pub fn roman_to_shavian(file: &str) -> Result<String, Box<dyn Error>> {
+    Ok(ipa_to_shavian(ipa_cleanup(roman_to_ipa(file)?)))
 }

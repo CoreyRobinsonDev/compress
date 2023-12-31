@@ -22,7 +22,7 @@ pub fn read_file(file_name: &str) -> Result<String, Box<dyn Error>>
         if word != &"\n" && word != &"" { num_words += 1};
     }
 
-    let output = format!(
+    println!(
         "File: {}\nContents: {}...\nCharacters: {}\nWords: {}",
         file_name,
         contents[0..4].join(" "),
@@ -30,6 +30,5 @@ pub fn read_file(file_name: &str) -> Result<String, Box<dyn Error>>
         num_words
     );
 
-
-    Ok(output)
+    Ok(contents.join(" "))
 }
