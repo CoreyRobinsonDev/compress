@@ -10,7 +10,7 @@ fn main() {
     
     if let Some(file) = args.get(1) {
         match roman_to_ipa(file) {
-            Ok(contents) => println!("{}", contents.get(0..4).unwrap()),
+            Ok(contents) => println!("{}", contents.get(0..2).unwrap()),
             Err(e) => println!("{e}")
             
         }
