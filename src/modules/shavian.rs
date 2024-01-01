@@ -65,29 +65,24 @@ pub const SHAVIAN_ALPHABET: [ShavianCharacter; 48] = [
 ];
 
 pub fn text_stats(contents: &String) -> String {
-    let num_char = contents
+    let contents = contents
         .clone()
-        .replace("\n", "")
+        .replace("  ", " ")
+        .replace("\n", "");
+    
+    let num_char = contents
         .chars()
         .count();
 
-    let contents = contents
-        .replace("\n", " \n ")
-        .replace("  ", " ");
-
-    let contents: Vec<&str> = contents
-        .split(" ")
-        .collect();
-
     let mut num_words = 0;
 
-    for word in contents.iter() {
-        if word != &"\n" && word != &"" { num_words += 1};
+    for word in contents.split(" ") {
+        if word != "" { num_words += 1};
     }
 
     format!(
-        "Contents: {}...\nCharacters: {}\nWords: {}",
-        contents[0],
+        "Contents: {}\nCharacters: {}\nWords: {}",
+        contents.get(0..).unwrap_or(""),
         num_char,
         num_words
     )
@@ -214,13 +209,13 @@ pub fn roman_to_shavian(file: &str, flag: bool) -> Result<(), Box<dyn Error>> {
         }
 
         println!("{}", header);
-        println!("===[ roman ]==============================");
+        println!("==[ roman ]===============================");
         println!("{}", text_stats(&roman));
         println!("[-]=======================================\n");
-        println!("===[ ipa ]================================");
+        println!("==[ ipa ]=================================");
         println!("{}", text_stats(&ipa));
         println!("[-]=======================================\n");
-        println!("===[ shavian ]============================");
+        println!("==[ shavian ]=============================");
         println!("{}", text_stats(&shavian));
         println!("[-]=======================================");
         println!("{}", footer);
