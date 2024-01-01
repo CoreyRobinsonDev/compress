@@ -87,7 +87,7 @@ pub fn text_stats(contents: &String) -> String {
 
     format!(
         "Contents: {}...\nCharacters: {}\nWords: {}",
-        contents[0..4].join(" "),
+        contents[0],
         num_char,
         num_words
     )
